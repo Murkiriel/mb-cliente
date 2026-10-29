@@ -1,0 +1,83 @@
+{
+  "name": "mb-cliente",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cliente não oficial, em Node.js, da API de Integração MultBovinos (BI e ERP): autenticação com relogin, fila de fazenda, paginação segura, erros tipados e parse do formato BR.",
+  "keywords": [
+    "multbovinos",
+    "mbweb",
+    "pecuaria",
+    "rebanho",
+    "confinamento",
+    "api-client",
+    "sdk",
+    "esm"
+  ],
+  "homepage": "https://github.com/Murkiriel/mb-cliente#readme",
+  "bugs": {
+    "url": "https://github.com/Murkiriel/mb-cliente/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Murkiriel/mb-cliente.git"
+  },
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "npm@11.19.1",
+  "sideEffects": false,
+  "files": [
+    "src",
+    "index.js",
+    "index.d.ts",
+    "docs/api.md",
+    "CHANGELOG.md"
+  ],
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.js"
+    },
+    "./errors": {
+      "types": "./src/errors.d.ts",
+      "import": "./src/errors.js"
+    },
+    "./constants": {
+      "types": "./src/constants.d.ts",
+      "import": "./src/constants.js"
+    },
+    "./helpers": {
+      "types": "./src/helpers/index.d.ts",
+      "import": "./src/helpers/index.js"
+    },
+    "./parsers": {
+      "types": "./src/parsers.d.ts",
+      "import": "./src/parsers.js"
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "coverage": "vitest run --coverage --coverage.reporter=text",
+    "test:live": "vitest run --config vitest.live.config.js",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc --noEmit",
+    "verify": "npm run lint && npm run format:check && npm run typecheck && npm run coverage"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@vitest/coverage-v8": "^5.0.5",
+    "eslint": "^10.13.0",
+    "globals": "^17.13.0",
+    "prettier": "^3.9.10",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  }
+}

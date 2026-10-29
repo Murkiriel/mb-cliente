@@ -1,0 +1,12 @@
+node_modules/
+coverage/
+*.log
+
+# Credenciais e variáveis de ambiente (só o modelo .env.example é versionado)
+.env
+.env.*
+!.env.example
+
+# Caches e lixo do sistema
+.DS_Store
+Thumbs.db

@@ -1,0 +1,5 @@
+#!/bin/sh
+# Instalado via: git config core.hooksPath .githooks (opcional — ver CONTRIBUTING.md).
+# .git/hooks/ não é versionado pelo git — por isso este hook mora aqui,
+# dentro do próprio repositório, em vez de lá.
+node scripts/checkSecrets.js

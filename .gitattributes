@@ -1,0 +1,3 @@
+# Finais de linha sempre LF no checkout, independente de core.autocrlf
+# (o Prettier exige LF; com autocrlf=true no Windows o format:check falhava).
+* text=auto eol=lf
