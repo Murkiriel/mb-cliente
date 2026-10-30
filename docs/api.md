@@ -725,6 +725,21 @@ Movimentações de estoque de animais (entradas, saídas, vendas, mortes) com pe
 
 > Receita real de venda está em `valor_total` deste endpoint (os campos financeiros de `erp.animais.getVendas()` vêm zerados).
 
+### `bi.animais.forEachBatch(opts, onBatch)` / `bi.movEstoque.forEachBatch(opts, onBatch)` ✅
+
+Os mesmos registros de `get()`, lidos aos poucos e entregues em lotes. Os dois endpoints devolvem o conjunto inteiro da fazenda num único JSON, sem paginação nem filtro de data: num rebanho grande, o corpo passa de dezenas de MB, e o `get()` converte tudo de uma vez (centenas de MB de memória). Com `forEachBatch`, a memória fica no tamanho do lote, qualquer que seja o tamanho da fazenda.
+
+- **`opts`:** `{ propertyId?, batchSize?, timeoutMs? }`, com `batchSize` padrão 1000. `propertyId` segue o mesmo contrato do `get()`.
+- **`onBatch(items)`:** recebe cada lote e é esperado antes da leitura continuar. Roda dentro da seção da fazenda, então não troque de fazenda nele. O `timeoutMs` cobre a leitura inteira, inclusive o tempo do `onBatch`.
+- **Retorno:** `{ count }`, o total entregue. Resposta sem registros dá `{ count: 0 }` sem chamar `onBatch`.
+- **Erros:** os mesmos do `get()`. Um erro lançado pelo `onBatch` interrompe a leitura e sai como foi lançado. Uma falha de rede depois do primeiro lote não é repetida (repetir entregaria os mesmos registros de novo): quem consome descarta o que recebeu, por exemplo desfazendo a transação.
+
+```js
+await mb.bi.animais.forEachBatch({ propertyId: 1 }, async (animais) => {
+  await gravar(animais)
+})
+```
+
 ### `bi.movMateriais.get({ from, to, propertyId? })` ⚠️
 
 Movimentações de materiais (compras, consumo nutricional, tratamentos, produção de ração).

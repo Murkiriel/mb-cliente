@@ -17,7 +17,7 @@ Cliente Node.js para a API de Integração MultBovinos (MBWEB). Expõe a API com
 O pacote não é publicado no npm. Instale direto do repositório, fixando uma tag (sempre com o prefixo `github:`; um `"mb-cliente": "^0.1.0"` no `package.json` procuraria no registro do npm, onde o nome não pertence a este projeto):
 
 ```bash
-npm install github:Murkiriel/mb-cliente#v0.1.0
+npm install github:Murkiriel/mb-cliente#v0.2.0
 ```
 
 **Node.js 22+ e só ESM.** O pacote é `"type": "module"` e o mapa de `exports` só tem a condição `import`: use `import { MultBovinos } from 'mb-cliente'`. `require()` não é suportado. Subpaths públicos, cada um com o seu `.d.ts`: `mb-cliente/errors`, `mb-cliente/constants`, `mb-cliente/helpers` e `mb-cliente/parsers`.
@@ -217,6 +217,12 @@ const { items, byProperty } = await mb.bi.animais.getAll()
 // byProperty: Map<propertyId, Animal[]>
 
 const { items } = await mb.bi.movEstoque.getAll()
+
+// Fazenda grande: os mesmos registros em lotes, lidos aos poucos (a memória
+// não cresce com o rebanho). onBatch é esperado antes do próximo lote.
+const { count } = await mb.bi.animais.forEachBatch({ propertyId: 1 }, async (lote) => {
+  await gravar(lote)
+})
 
 // Endpoints por-propriedade sem getAll() próprio — use mb.forAllProperties()
 const suplementacao = await mb.forAllProperties(async (propId) => {

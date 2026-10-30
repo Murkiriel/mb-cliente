@@ -11,6 +11,7 @@ import {
   InvalidResponseError,
 } from './errors.js'
 import { sleep } from './sleep.js'
+import { streamJsonArray } from './jsonStream.js'
 import { CHANNELS, publish } from './diagnostics.js'
 import { checkNonNegative, checkPositiveInt, checkTimeout } from './validate.js'
 
@@ -32,6 +33,39 @@ function detailOnly(data) {
   // A checagem barata primeiro: quase nenhuma resposta tem `detail`, e só
   // nessas vale listar as chaves.
   return typeof data.detail === 'string' && Object.keys(data).length === 1 ? data.detail : null
+}
+
+// Leitura padrão do corpo: o texto inteiro.
+const readText = async (res) => ({ text: await res.text() })
+
+// Erro lançado pelo onBatch de quem chama, embrulhado para atravessar o
+// tratamento de falhas de rede do #send sem virar NetworkError.
+class CallbackFailure extends Error {
+  constructor(cause) {
+    super('onBatch falhou', { cause })
+  }
+}
+
+// Leitura em fluxo (getStream): só um 200 é lido aos poucos; qualquer outro
+// status vai como texto para a classificação de sempre (401, 4xx, 5xx).
+function streamReader({ field, batchSize, onBatch }, slug) {
+  return async (res, state) => {
+    if (res.status !== 200) return readText(res)
+    const out = await streamJsonArray(res.body, {
+      field,
+      batchSize,
+      slug,
+      onBatch: async (items) => {
+        state.delivered = true
+        try {
+          await onBatch(items)
+        } catch (err) {
+          throw new CallbackFailure(err)
+        }
+      },
+    })
+    return out.found ? { count: out.count } : { text: out.text }
+  }
 }
 
 // Quanto do corpo de uma resposta inválida vai para o erro — o bastante para
@@ -100,6 +134,21 @@ export class HttpClient {
     return this.#request('GET', path, { params, signal, timeoutMs })
   }
 
+  // GET em fluxo: entrega a lista `field` do corpo em lotes para onBatch, sem
+  // guardar o corpo inteiro (jsonStream.js). Mesma autenticação, relogin,
+  // prazo e classificação de erros do get(); o prazo cobre também o tempo de
+  // onBatch. Sem nova tentativa depois do primeiro lote entregue (repetir
+  // entregaria os mesmos registros de novo). Uma resposta sem a lista é um
+  // envelope sem registros: { count: 0 }, como no get().
+  async getStream(path, params, { signal, timeoutMs, field, batchSize, onBatch }) {
+    return this.#request('GET', path, {
+      params,
+      signal,
+      timeoutMs,
+      stream: { field, batchSize, onBatch },
+    })
+  }
+
   async post(path, body = {}, { signal, timeoutMs } = {}) {
     return this.#request('POST', path, { body, signal, timeoutMs })
   }
@@ -134,6 +183,7 @@ export class HttpClient {
       suppressRelogin = false,
       anonymous = false,
       requireAuth = true,
+      stream,
     } = options
     checkTimeout(timeoutMs)
     const url = this.#buildUrl(path, params)
@@ -152,7 +202,16 @@ export class HttpClient {
     const page = params?.page
     // Alguns caminhos internos já trazem "?format=json": o evento leva só o caminho.
     const trace = { method, path: path.split('?')[0], page }
-    const { status, text } = await this.#send(url, fetchOpts, signal, timeoutMs, trace)
+    const reader = stream ? streamReader(stream, path) : readText
+    const { status, text, count } = await this.#send(
+      url,
+      fetchOpts,
+      signal,
+      timeoutMs,
+      trace,
+      reader
+    )
+    if (count !== undefined) return { count }
 
     if (status === 401) {
       if (!suppressRelogin && tokenUsed !== null) {
@@ -168,6 +227,8 @@ export class HttpClient {
     }
 
     const data = this.#parse(method, path, status, text, page)
+    // Em fluxo, sem a lista no corpo: envelope sem registros.
+    if (stream) return { count: 0 }
 
     // Limite silencioso de requisições — 200 vazio no grid ERP. Restrito a GET: esse
     // formato só existe do lado de leitura do grid ERP paginado — sem essa
@@ -274,7 +335,12 @@ export class HttpClient {
   //
   // trace ({ method, path, page }): o que vai nos eventos de diagnóstico
   // (diagnostics.js) — o caminho sem a query string, nunca a URL inteira.
-  async #send(url, opts, callSignal, timeoutMs, trace) {
+  //
+  // readBody(res, state): lê o corpo (padrão: o texto inteiro). Em fluxo, marca
+  // state.delivered ao entregar o primeiro lote, e daí em diante uma falha de
+  // rede não é repetida. Um erro do próprio onBatch chega embrulhado em
+  // CallbackFailure e sai como foi lançado, nunca como erro de rede.
+  async #send(url, opts, callSignal, timeoutMs, trace, readBody = readText) {
     const maxAttempts = opts.method === 'GET' ? this.#retryAttempts : 1
     const mayHaveSucceeded = opts.method !== 'GET'
     // "Quem chama cancelou", montado uma vez para todas as tentativas: o signal
@@ -291,6 +357,7 @@ export class HttpClient {
       const deadline = new AbortController()
       const timer = setTimeout(() => deadline.abort(), timeoutMs)
       const started = performance.now()
+      const state = { delivered: false }
       const done = (status, error) =>
         publish(CHANNELS.request, () => ({
           ...trace,
@@ -304,10 +371,18 @@ export class HttpClient {
           ...opts,
           signal: ext ? AbortSignal.any([deadline.signal, ext]) : deadline.signal,
         })
-        const text = await res.text()
+        const body = await readBody(res, state)
         done(res.status)
-        return { status: res.status, text }
+        return { status: res.status, ...body }
       } catch (err) {
+        if (err instanceof CallbackFailure) {
+          done(null, 'CallbackError')
+          throw err.cause
+        }
+        if (err instanceof InvalidResponseError) {
+          done(null, err.name)
+          throw err
+        }
         // status null: a requisição não teve resposta. error: o motivo, só o
         // nome (a mensagem leva a URL com a query string).
         const reason = ext?.aborted
@@ -326,7 +401,7 @@ export class HttpClient {
             cause: err,
           })
         }
-        if (attempt >= maxAttempts) {
+        if (attempt >= maxAttempts || state.delivered) {
           throw new NetworkError(`Falha de rede na API MultBovinos (${err.message}): ${url}`, {
             url,
             method: opts.method,

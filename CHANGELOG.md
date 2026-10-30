@@ -6,6 +6,12 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), e
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-30
+
+### Adicionado
+
+- `bi.animais.forEachBatch(opts, onBatch)` e `bi.movEstoque.forEachBatch(opts, onBatch)`: os mesmos registros do `get()`, lidos em fluxo e entregues em lotes (`batchSize`, padrão 1000). Esses endpoints devolvem a fazenda inteira num único JSON; o `get()` converte tudo de uma vez, enquanto o `forEachBatch` mantém a memória no tamanho do lote, sem dependência nova. Num corpo de 65 MB, a leitura coube em 32 MB de heap. Mesma autenticação, relogin, prazo e classificação de erros do `get()`. O prazo cobre também o tempo do `onBatch`, e uma falha de rede depois do primeiro lote não é repetida.
+
 ## [0.1.0] - 2026-10-29
 
 Primeira versão pública. Distribuída pelo GitHub (`npm install github:Murkiriel/mb-cliente#v0.1.0`); o pacote não é publicado no npm.
@@ -33,4 +39,5 @@ Primeira versão pública. Distribuída pelo GitHub (`npm install github:Murkiri
 - `erp.animais.getConfinamento(params)`: listagem dos lotes de confinamento por fazenda, que respondia HTTP 500 e voltou a funcionar (sonda de 2026-10-29); `from`/`to` filtram pela abertura do lote (`data_abertura`).
 - Declarações TypeScript completas na raiz e nos subpaths `/errors`, `/constants`, `/helpers` e `/parsers`.
 
+[0.2.0]: https://github.com/Murkiriel/mb-cliente/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Murkiriel/mb-cliente/releases/tag/v0.1.0

@@ -314,3 +314,62 @@ describe('BiApi sem os endpoints inviáveis', () => {
     expect('movExtra' in bi).toBe(false)
   })
 })
+
+describe('forEachBatch (leitura em fluxo do BI)', () => {
+  // Cliente falso de getStream: entrega `items` em lotes do tamanho pedido.
+  function streamClient(items) {
+    return {
+      getStream: vi.fn(async (_path, _params, { batchSize, onBatch }) => {
+        for (let i = 0; i < items.length; i += batchSize)
+          await onBatch(items.slice(i, i + batchSize))
+        return { count: items.length }
+      }),
+    }
+  }
+
+  it.each([
+    ['animais', 'obtenha-cadastros-gados-sisbov'],
+    ['movEstoque', 'obtenha-movimentacoes-gados-estoque'],
+  ])('bi.%s: lotes do caminho certo, com propertyId e prazo', async (name, slugPart) => {
+    const client = streamClient([{ a: 1 }, { a: 2 }, { a: 3 }])
+    const auth = makeAuth()
+    const bi = new BiApi(client, auth)
+    const batches = []
+    const res = await bi[name].forEachBatch(
+      { propertyId: 2, batchSize: 2, timeoutMs: 1000 },
+      (items) => batches.push(items)
+    )
+    expect(res).toEqual({ count: 3 })
+    expect(batches).toEqual([[{ a: 1 }, { a: 2 }], [{ a: 3 }]])
+    expect(auth.selectProperty).toHaveBeenCalledWith(client, 2)
+    const [path, params, opts] = client.getStream.mock.calls[0]
+    expect(path).toContain(slugPart)
+    expect(params).toBeUndefined()
+    expect(opts).toMatchObject({ field: 'dados', batchSize: 2, timeoutMs: 1000 })
+  })
+
+  it('lote padrão de 1000 e sem propertyId usa a fazenda selecionada', async () => {
+    const client = streamClient([])
+    const auth = makeAuth()
+    const bi = new BiApi(client, auth)
+    expect(await bi.animais.forEachBatch(undefined, () => {})).toEqual({ count: 0 })
+    expect(client.getStream.mock.calls[0][2]).toEqual({
+      field: 'dados',
+      batchSize: 1000,
+      onBatch: expect.any(Function),
+    })
+    expect(auth.selectProperty).not.toHaveBeenCalled()
+  })
+
+  it('opção errada é recusada antes de trocar a fazenda', async () => {
+    const client = streamClient([])
+    const auth = makeAuth()
+    const bi = new BiApi(client, auth)
+    await expect(bi.animais.forEachBatch({ propertyId: 2 })).rejects.toThrow(ValidationError)
+    await expect(
+      bi.movEstoque.forEachBatch({ propertyId: 2, batchSize: 0 }, () => {})
+    ).rejects.toThrow(/batchSize/)
+    expect(auth.selectProperty).not.toHaveBeenCalled()
+    expect(client.getStream).not.toHaveBeenCalled()
+  })
+})

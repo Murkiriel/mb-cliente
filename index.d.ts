@@ -690,9 +690,30 @@ export interface BiDateRange extends PropertyScope {
   to: string
 }
 
+export interface BiBatchOptions extends PropertyScope {
+  /** Registros por lote (padrão 1000). */
+  batchSize?: number
+}
+
+export interface BiBatchResult {
+  /** Quantos registros foram entregues ao onBatch. */
+  count: number
+}
+
+/**
+ * Recebe cada lote. Roda dentro da seção da fazenda (não troque de fazenda
+ * nele) e é esperado antes do próximo lote; o timeoutMs cobre o tempo dele.
+ */
+export type BiBatchHandler<T> = (items: T[]) => unknown
+
 export interface AnimaisBi {
   /** Animais de uma fazenda — ver {@link PropertyScope}. */
   get(options?: PropertyScope): Promise<BiResult<BiAnimal>>
+  /** Os mesmos animais de get(), lidos aos poucos e entregues em lotes. */
+  forEachBatch(
+    options: BiBatchOptions | undefined,
+    onBatch: BiBatchHandler<BiAnimal>
+  ): Promise<BiBatchResult>
   /** Todas as fazendas, uma de cada vez; ao final, a selecionada é a última. */
   getAll(propertyIds?: number[]): Promise<AnimaisGetAllResult<BiAnimal>>
 }
@@ -700,6 +721,11 @@ export interface AnimaisBi {
 export interface MovEstoqueBi {
   /** Movimentações de uma fazenda — ver {@link PropertyScope}. */
   get(options?: PropertyScope): Promise<BiResult<BiMovEstoque>>
+  /** As mesmas movimentações de get(), lidas aos poucos e entregues em lotes. */
+  forEachBatch(
+    options: BiBatchOptions | undefined,
+    onBatch: BiBatchHandler<BiMovEstoque>
+  ): Promise<BiBatchResult>
   /** Todas as fazendas, uma de cada vez; ao final, a selecionada é a última. */
   getAll(propertyIds?: number[]): Promise<BiResult<BiMovEstoque>>
 }

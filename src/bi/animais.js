@@ -1,6 +1,6 @@
 import { BI_SLUGS } from '../constants.js'
 import { forAllProperties } from '../helpers/allProperties.js'
-import { getDados } from './fetchDados.js'
+import { getDados, streamDados, streamOptions } from './fetchDados.js'
 
 export class AnimaisBi {
   #client
@@ -17,6 +17,18 @@ export class AnimaisBi {
   async get({ propertyId, timeoutMs } = {}) {
     return this.#auth.inProperty(this.#client, propertyId, 'bi.animais.get', () =>
       getDados(this.#client, BI_SLUGS.ANIMAIS, undefined, { timeoutMs })
+    )
+  }
+
+  // Os mesmos animais de get(), em lotes de até batchSize (padrão 1000) para
+  // onBatch, lidos aos poucos: a memória não cresce com o tamanho do rebanho.
+  // onBatch roda dentro da seção da fazenda (não troque de fazenda nele) e é
+  // esperado antes do próximo lote; o timeoutMs cobre também o tempo dele.
+  // Devolve { count }.
+  async forEachBatch(options, onBatch) {
+    const opts = streamOptions(options, onBatch)
+    return this.#auth.inProperty(this.#client, options?.propertyId, 'bi.animais.forEachBatch', () =>
+      streamDados(this.#client, BI_SLUGS.ANIMAIS, opts)
     )
   }
 
